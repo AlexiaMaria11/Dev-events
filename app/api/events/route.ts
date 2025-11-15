@@ -10,50 +10,62 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
 
-    let event;
+    let event: Record<string, any> = Object.fromEntries(formData.entries());
+
+    let tags: string[] = [];
+    let agenda: string[] = [];
 
     try {
-      event = Object.fromEntries(formData.entries());
-    } catch (e) {
+      tags = JSON.parse(formData.get("tags") as string);
+    } catch {}
+    try {
+      agenda = JSON.parse(formData.get("agenda") as string);
+    } catch {}
+
+    const fileOrUrl = formData.get("image");
+
+    if (!fileOrUrl)
       return NextResponse.json(
-        { message: "Invalid JSON data format" },
+        { message: "Image is required" },
+        { status: 400 }
+      );
+
+    let imageUrl: string;
+
+    // Dacă e File → urcă la Cloudinary
+    if (fileOrUrl instanceof File) {
+      const arrayBuffer = await fileOrUrl.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            { resource_type: "image", folder: "DevEvent" },
+            (error, result) => {
+              if (error) return reject(error);
+              resolve(result);
+            }
+          )
+          .end(buffer);
+      });
+
+      imageUrl = (uploadResult as { secure_url: string }).secure_url;
+    } else if (typeof fileOrUrl === "string") {
+      // Dacă e string → folosește direct ca URL
+      imageUrl = fileOrUrl;
+    } else {
+      return NextResponse.json(
+        { message: "Invalid image data" },
         { status: 400 }
       );
     }
 
-    const file = formData.get("image") as File;
-
-    if (!file)
-      return NextResponse.json(
-        { message: "Image file is required" },
-        { status: 400 }
-      );
-
-    let tags = JSON.parse(formData.get("tags") as string);
-    let agenda = JSON.parse(formData.get("agenda") as string);
-
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const uploadResult = await new Promise((resolve, reject) => {
-      cloudinary.uploader
-        .upload_stream(
-          { resource_type: "image", folder: "DevEvent" },
-          (error, results) => {
-            if (error) return reject(error);
-
-            resolve(results);
-          }
-        )
-        .end(buffer);
-    });
-
-    event.image = (uploadResult as { secure_url: string }).secure_url;
+    event.image = imageUrl;
 
     const createdEvent = await Event.create({
       ...event,
-      tags: tags,
-      agenda: agenda,
+      tags,
+      agenda,
     });
 
     return NextResponse.json(

@@ -5,13 +5,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "res.cloudinary.com",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
       },
     ],
   },
   reactCompiler: true,
   experimental: {
     turbopackFileSystemCacheForDev: true,
+    cacheComponents: true,
   },
 };
 
